@@ -1,0 +1,78 @@
+# Release on a version tag (git tag v1.2.3 && git push origin v1.2.3):
+#   1. checks the TOC's ## Version matches the tag
+#   2. zips the IronbarkUI folder (drop-in for Interface\AddOns)
+#   3. creates the GitHub release with that zip and the CHANGELOG section
+#   4. uploads the zip to CurseForge, when these are set in the repo settings:
+#        secret   CF_API_KEY        CurseForge API token
+#        variable CF_PROJECT_ID     the project's numeric id
+#        variable CF_GAME_VERSIONS  JSON array of CurseForge game version ids
+#                                   ([17053] = WoW Forever 1.60.1)
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Version
+        id: v
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          toc=$(grep -m1 '^## Version:' IronbarkUI/IronbarkUI.toc | sed 's/^## Version:[[:space:]]*//' | tr -d '\r')
+          if [ "$tag" != "$toc" ]; then
+            echo "Tag v$tag does not match the TOC version $toc" >&2
+            exit 1
+          fi
+          echo "version=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Package
+        run: zip -r "IronbarkUI-${{ steps.v.outputs.version }}.zip" IronbarkUI -x '*.DS_Store'
+
+      - name: Release notes
+        run: |
+          # this version's CHANGELOG section (up to the next heading or rule)
+          awk -v v="## ${{ steps.v.outputs.version }}" '
+            $0 == v { on = 1; next }
+            on && (/^## / || /^---/) { exit }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Ironbark UI ${{ steps.v.outputs.version }}" > notes.md
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip="IronbarkUI-${{ steps.v.outputs.version }}.zip"
+          # a re-run replaces the zip on the existing release
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$zip" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$zip" \
+              --title "Ironbark UI ${{ steps.v.outputs.version }}" --notes-file notes.md
+          fi
+
+      - name: CurseForge upload
+        if: ${{ vars.CF_PROJECT_ID != '' }}
+        env:
+          CF_API_KEY: ${{ secrets.CF_API_KEY }}
+          CF_PROJECT_ID: ${{ vars.CF_PROJECT_ID }}
+          CF_GAME_VERSIONS: ${{ vars.CF_GAME_VERSIONS }}
+        run: |
+          if [ -z "$CF_API_KEY" ]; then echo "CF_API_KEY secret not set; skipping"; exit 0; fi
+          metadata=$(jq -n --rawfile notes notes.md --argjson versions "${CF_GAME_VERSIONS:-[]}" \
+            --arg name "Ironbark UI ${{ steps.v.outputs.version }}" \
+            '{changelog: $notes, changelogType: "markdown", displayName: $name,
+              releaseType: "release", gameVersions: $versions}')
+          curl --fail-with-body -sS \
+            -H "X-Api-Token: $CF_API_KEY" \
+            -F "metadata=$metadata" \
+            -F "file=@IronbarkUI-${{ steps.v.outputs.version }}.zip" \
+            "https://wow.curseforge.com/api/projects/$CF_PROJECT_ID/upload-file"

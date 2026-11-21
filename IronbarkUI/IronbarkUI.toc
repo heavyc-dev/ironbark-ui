@@ -1,0 +1,24 @@
+## Interface: 16001
+## Title: Ironbark UI
+## Notes: A clean, classic polish for the default WoW Forever UI: one layout, class bar layouts, buff and HoT reminders, meters, bags, chat and quest tracker. Apply backs up first; Revert puts everything back.
+## Author: Heavy C Dev
+## Version: 1.0.0
+## SavedVariables: IronbarkUIDB
+## IconTexture: Interface\AddOns\IronbarkUI\IronbarkUI-Logo.png
+
+Core.lua
+Presets.lua
+EditMode.lua
+Frames.lua
+ActionBars.lua
+ManaRegen.lua
+Bags.lua
+Theme.lua
+Buffs.lua
+Nameplates.lua
+Chat.lua
+Quest.lua
+Minimap.lua
+Meters.lua
+Setup.lua
+Options.lua
