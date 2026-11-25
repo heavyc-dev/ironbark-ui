@@ -326,22 +326,66 @@ local function HookTargetSize()
 end
 
 -------------------------------------------------------------------------------
---  No tooltips in combat (hold Alt to see one anyway)
+--  Fewer tooltips in combat (hold Alt to see one anyway): only the ones that
+--  get in the way of playing, i.e. friendly units (players, pets, NPCs, their
+--  unit frames) and action buttons. Enemies, items, loot, buffs and debuffs,
+--  minimap pins and interface buttons keep theirs.
 -------------------------------------------------------------------------------
-local function CombatHidden()
-    return ns.db and ns.db.tooltipCombatHide and InCombatLockdown() and not IsAltKeyDown()
+local function OwnerUnit(owner)
+    if not owner then return end
+    if type(owner.unit) == "string" then return owner.unit end
+    if owner.GetAttribute then
+        local u = owner:GetAttribute("unit")
+        if type(u) == "string" then return u end
+    end
 end
-GameTooltip:HookScript("OnShow", function(self)
-    if CombatHidden() then self:Hide() end
-end)
+
+local function IsActionButton(owner)
+    if not owner or owner == UIParent then return false end
+    if owner.action ~= nil then return true end -- action bars 1-8
+    local name = owner.GetName and owner:GetName()
+    return type(name) == "string"
+        and (name:find("^PetActionButton") or name:find("^StanceButton")) and true or false
+end
+
+-- true for a tooltip this option hides. Anything unreadable (the client keeps
+-- some combat data secret) counts as "leave it alone".
+local function Unwanted(tip)
+    local owner = tip:GetOwner()
+    if IsActionButton(owner) then return true end
+    local isUnit
+    if tip.GetTooltipData and Enum and Enum.TooltipDataType then
+        local data = tip:GetTooltipData()
+        isUnit = data and data.type == Enum.TooltipDataType.Unit
+    elseif tip.GetUnit then
+        isUnit = select(2, tip:GetUnit()) ~= nil
+    end
+    if not isUnit then return false end
+    -- the world unit under the cursor, else the unit frame the tooltip belongs to
+    local unit = (owner == nil or owner == UIParent) and UnitExists("mouseover") and "mouseover"
+        or OwnerUnit(owner) or (UnitExists("mouseover") and "mouseover")
+    if not unit then return false end
+    return UnitIsFriend("player", unit) and true or false
+end
+
+local function HideInCombat(tip)
+    if tip ~= GameTooltip then return end
+    if not (ns.db and ns.db.tooltipCombatHide and InCombatLockdown()) or IsAltKeyDown() then return end
+    local ok, unwanted = pcall(Unwanted, tip)
+    if ok and unwanted then tip:Hide() end
+end
+
+GameTooltip:HookScript("OnShow", HideInCombat)
+-- a shown tooltip can change what it describes without re-showing
+if TooltipDataProcessor and TooltipDataProcessor.AddTooltipPostCall and TooltipDataProcessor.AllTypes then
+    TooltipDataProcessor.AddTooltipPostCall(TooltipDataProcessor.AllTypes, HideInCombat)
+end
 do
     local f = CreateFrame("Frame")
     f:RegisterEvent("PLAYER_REGEN_DISABLED")
     -- lockdown starts just after this event: hide whatever is up a frame later
     f:SetScript("OnEvent", function()
-        C_Timer.After(0, function()
-            if CombatHidden() then GameTooltip:Hide() end
-        end)
+        C_Timer.After(0, function() HideInCombat(GameTooltip) end)
     end)
 end
 

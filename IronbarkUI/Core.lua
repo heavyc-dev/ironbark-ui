@@ -12,18 +12,22 @@ ns.LAYOUT_NAME = "Ironbark UI"
 -- simply how Ironbark behaves (kept as settings so code reads clearly).
 ns.defaults = {
     -- options panel
-    manageUIScale     = true,     -- apply the layout's UI scale (0.64)
+    manageUIScale     = true,     -- Ironbark sets the game's UI scale
+    uiScale           = 0.64,     -- that scale (slider; capped by ns.MaxUIScale)
     classColors       = true,     -- class-colored health on player/target/focus/party
     compactText       = true,     -- "961 | 100%" health/power text (mouseover + combat)
     tooltipCursor     = true,     -- tooltips follow the mouse
-    tooltipCombatHide = true,     -- no tooltips in combat (Alt shows one)
+    tooltipCombatHide = true,     -- combat: no friendly-unit / action button tooltips (Alt shows one)
     castBarAlways     = true,     -- empty cast bar frame stays on screen between casts
     buffReminders     = true,     -- missing-buff icons on you, party and raid frames
+    buffCombat        = true,     -- ...kept up (and clickable) in combat
     hotIcons          = true,     -- your HoTs under the left side of party frames
+    hotBars           = true,     -- healing your HoTs still owe, drawn past the end of health bars
     combinedBags      = true,     -- one bag window
     chatPolish        = true,     -- master switch for every chat* below
     chatAutoHide      = true,     -- chat fades away 30s after the last activity that matters
     questTracker      = true,     -- Ironbark's own quest tracker
+    gatherPopups      = true,     -- "Light Leather +2 (14)" mid-screen when you gather
     minimapCollect    = true,     -- addon minimap buttons in one slide-out button
     meters            = true,     -- small damage + healing meters (instances / combat only)
     meterSession      = "overall", -- meters: "overall" (since reset) or "current" (this fight)
@@ -144,6 +148,7 @@ local HELP = {
     { "/ibui chatsetup", "chat tabs: General, Combat Log, Social, World, Loot" },
     { "/ibui meters", "show / hide the meters now" },
     { "/ibui buffs test", "preview every buff reminder icon" },
+    { "/ibui probe", "support: 40s of notes on heals and auras, saved on /reload" },
     { "/ibui debug", "save diagnostics (then /reload)" },
     { "/ibui bars", "save what's on every action slot (then /reload)" },
     { "/ibui reset", "Ironbark's options back to defaults (keeps your saved copies)" },
@@ -169,6 +174,8 @@ SlashCmdList.IRONBARKUI = function(msg)
         StaticPopup_Show("IRONBARKUI_CHATSETUP")
     elseif cmd == "buffs" and arg == "test" then
         if ns.ToggleBuffTest then ns.ToggleBuffTest() end
+    elseif cmd == "probe" then
+        if ns.Probe then ns.Probe() end
     elseif cmd == "meters" then
         if ns.ToggleMeterTest then ns.ToggleMeterTest() else ns.Print("Meters aren't available on this client.") end
     elseif cmd == "arrange" then

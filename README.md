@@ -38,7 +38,9 @@ the addon.
 - XP bar along the top in your class color. Minimap top-right, quest tracker
   under it, chat bottom-left, micro menu top-left with the bag bar tucked
   away to its right. Your buffs left of the minimap, clear of the XP bar.
-- UI scale 0.64.
+- UI scale 0.64 by default, with a slider in the options to make everything
+  bigger: each group grows from its own screen edge, so nothing overlaps, and
+  the slider stops at the biggest size your screen fits.
 
 ## What else it does
 
@@ -47,7 +49,12 @@ the addon.
   orange, utility gold); a mana regen spark for the 5 second rule.
 - **Buff & dispel reminders:** glowing icons on you, party and raid members for
   your buffs they're missing and debuffs you can remove (in their curse /
-  poison / magic / disease color). Click one to cast it. Out of combat only.
+  poison / magic / disease color). Click one to cast it. In combat too: each
+  icon's spot is fixed when the fight starts, bright while needed, hidden
+  while not (a hidden spot still casts if clicked). The game hides auras in
+  combat, so buffs go by what was missing at the pull; debuffs you can remove
+  are drawn by the game's own aura display on top of the dispel button (party
+  and your own frame; in raids the dispel buttons sit dim).
   - Druid: Mark of the Wild; Thorns on the tank and you
   - Priest: Fortitude; Divine Spirit on mana users; Inner Fire on you
   - Mage: Arcane Intellect on mana users; an armor on you
@@ -60,8 +67,12 @@ the addon.
   - Dispels: druid (curse, poison), priest (magic, disease), paladin (magic,
     poison, disease), shaman (poison, disease), mage (curse)
 - **Your HoTs and shields:** Rejuvenation, Regrowth, Renew and Power Word:
-  Shield you've cast show under the left side of each teammate's frame with a
-  timer sweep, in combat too.
+  Shield you've cast show under the left side of your own and each teammate's
+  frame with a timer sweep, in combat too.
+- **HoT healing on health bars:** a lighter green stretch past the end of
+  someone's health shows what your Rejuvenation, Regrowth or Renew still has
+  to heal, stopping at full. Counted from your own casts (works in combat);
+  other healers' HoTs aren't included.
 - **Game options:** auto loot on; hold a key to keep casting its spell.
 - **Action buttons:** grey keybind text; the whole icon turns red when out of
   range.
@@ -75,10 +86,14 @@ the addon.
   clickable links, sticky whispers, Up/Down history, spam filter, and loot from
   your group only.
 - **Quest tracker:** Ironbark's own, from your quest log, grouped by zone.
-  Background on hover; click to collapse, Ctrl-click a zone to pin it,
-  right-click a quest to hide its objectives; only dungeon quests inside
+  Background on hover; mouse wheel scrolls a long list; click to collapse, Ctrl-click a zone to pin it;
+  right-click a quest for a menu (open, hide objectives, stop tracking, link
+  in chat, share, abandon), a zone or the title for theirs; only dungeon quests inside
   dungeons; fades in combat. Questie's and Blizzard's tracker windows are hidden
   while it's on (their settings aren't touched).
+- **Gathering pop-ups:** what you skin, mine, pick or fish flashes mid-screen
+  the way quest progress does (`Light Leather +2 (14)`: gained, and how many
+  you now carry), and so do gathering skill-ups (`Skinning: 76`).
 - **Minimap:** addon buttons tucked into one button that slides them out.
 - **Meters:** two small windows at the bottom-right framed in WoW Forever's
   own bronze HUD line (the micro menu's box), Healing over Damage. Top 5 with
@@ -107,20 +122,23 @@ the addon.
 ## Options
 
 Esc > Options > AddOns > Ironbark UI, or `/ibui`: Apply, Revert everything, UI
-scale, class colors, compact health text, tooltips follow mouse, hide tooltips in
-combat (Alt shows one), buff reminders,
-one bag window, chat polish, quest tracker, minimap buttons, meters.
+scale, class colors, compact health text, tooltips follow mouse, fewer tooltips in
+combat (friendly units and action buttons hide theirs; Alt shows one), buff reminders,
+one bag window, chat polish, quest tracker, gathering pop-ups, minimap buttons, meters.
 
 `/ibui help` lists every command. Slash: `/ibui apply`, `/ibui revert`. Single steps: `/ibui chatsetup`,
 `/ibui keybinds [undo]`, `/ibui arrange [undo]`. Support: `/ibui debug`,
-`/ibui layout` (re-apply just the layout), `/ibui bars`, `/ibui buffs test`, `/ibui meters` (show the meters any time,
+`/ibui layout` (re-apply just the layout), `/ibui bars`, `/ibui buffs test`, `/ibui probe` (40 seconds of
+notes on what the client shows about heals and auras, saved on /reload), `/ibui meters` (show the meters any time,
 with sample data if there's no fight yet; again to hide), `/ibui reset`.
 
 ## Testing vs. EllesmereUI
 
 `tools\ui-switch.ps1` (PowerShell, with WoW **fully closed**) backs up `WTF` and
 switches between the two: `status`, `backup -Label name [-IncludeAddOns]`,
-`ironbark`, `ellesmere`, `restore -Zip <file>`. Before switching back, run
+`ironbark`, `hybrid`, `ellesmere`, `restore -Zip <file>`. `hybrid` is Ironbark for
+the look with EllesmereUI's QoL modules and bags left on (Ironbark's own bag
+window stands down, and the UI scale stays Ironbark's). Before switching back, run
 **Revert everything** in game: Edit Mode layouts and some settings are stored on
 Blizzard's servers.
 

@@ -2,9 +2,15 @@
 --  Ironbark UI - the layout
 --
 --  An Edit Mode layout for the DEFAULT Blizzard frames. Coordinates are
---  UIParent units at the layout's uiScale. Anchors are
---  { point, relativeTo, relativePoint, x, y }; relativeTo may be another Edit
---  Mode frame so groups stay glued together on any aspect ratio.
+--  UIParent units. Anchors are { point, relativeTo, relativePoint, x, y };
+--  relativeTo may be another Edit Mode frame so groups stay glued together on
+--  any aspect ratio.
+--
+--  Scaling: every group hangs off a screen edge or corner (the center column
+--  off the BOTTOM edge), never off the screen's center. Offsets are in UI
+--  units, so at a bigger UI scale each group grows away from its edge and
+--  keeps its inner spacing: nothing inside a group can overlap. Groups can
+--  only meet side to side, which ns.MaxUIScale() (EditMode.lua) prevents.
 --
 --  Action bar keys map to Enum.EditModeActionBarSystemIndices:
 --    MainBar = Action Bar 1, Bar2 = Bottom Left (Action Bar 2),
@@ -14,7 +20,8 @@
 --  Ironbark:
 --    three 12-wide bars stacked bottom-up and touching (Bar3 -> Bar2 ->
 --    Action Bar 1), gryphons flanking the whole block
---    cast bar centered at y -225, player/target hugging its ends (12 gap)
+--    cast bar centered 375 above the bottom edge, player/target hugging its
+--    ends (12 gap)
 --    party: Blizzard's classic party frames at 150% in a centered row below
 --    raid: above the chat, groups as rows of 5, class colors + power bars
 --    XP bar top of screen, minimap top-right, chat bottom-left,
@@ -25,13 +32,13 @@ local _, ns = ...
 
 -- bump when the layout below changes: players who applied an older one are
 -- offered the new one at login (layout only)
-ns.LAYOUT_VERSION = 3 -- 3: auto loot + hold to cast
+ns.LAYOUT_VERSION = 4 -- 4: center column anchored from the bottom edge (UI scale slider)
 
 ns.presets = {
     ironbark = {
         name = "Ironbark",
         description = "Stacked center bars framed by gryphons, frames around the cast bar, party row below.",
-        uiScale = 0.64,
+        uiScale = 0.64, -- default; the options slider (db.uiScale) overrides it
         actionBars = {
             -- which of bars 2-8 are enabled: three 12-wide bars, nothing else
             enabled = { Bar2 = true, Bar3 = true, RightBar1 = false, RightBar2 = false,
@@ -57,7 +64,8 @@ ns.presets = {
             Target = { anchor = { "LEFT", "PlayerCastingBarFrame", "RIGHT", 12, -2 } },
             -- classic party frames (portrait, health, power) at 150%; Frames.lua
             -- lays them out in a row centered on this TOP-center anchor
-            Party  = { anchor = { "TOP", "UIParent", "CENTER", 0, -325 },
+            -- (275 / 375 above the bottom edge = the old center -325 / -225 at 0.64)
+            Party  = { anchor = { "TOP", "UIParent", "BOTTOM", 0, 275 },
                        raidStyle = false, horizontal = false, frameSize = 150 },
             -- raid: above the chat (its tabs), groups as rows of 5
             Raid   = { anchor = { "BOTTOMLEFT", "ChatFrame1", "TOPLEFT", -4, 34 }, horizontal = true },
@@ -70,7 +78,7 @@ ns.presets = {
         castBarLockToPlayer = false,
         castBarShowTime = true,
         systems = {
-            CastBar           = { anchor = { "CENTER", "UIParent", "CENTER", 0, -225 } },
+            CastBar           = { anchor = { "CENTER", "UIParent", "BOTTOM", 0, 375 } },
             StatusTrackingBar = { anchor = { "TOP", "UIParent", "TOP", 0, 0 } },
             -- micro menu top-left; the bag bar sits to its right, hidden until
             -- its arrow is clicked

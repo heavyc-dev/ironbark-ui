@@ -3,3 +3,4 @@
 .DS_Store
 backups/
 !IronbarkUI/*.png
+__pycache__/

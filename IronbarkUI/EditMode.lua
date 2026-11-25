@@ -360,11 +360,62 @@ local function ApplyBarToggles(enabled)
     end
 end
 
-local function ApplyCVars(preset)
-    if ns.db.manageUIScale and preset.uiScale then
-        SetCVar("useUiScale", "1")
-        SetCVar("uiScale", tostring(preset.uiScale))
+-------------------------------------------------------------------------------
+--  UI scale. The layout's groups each hang off a screen edge, so scaling up
+--  can't make frames overlap inside a group; the only limit is side to side,
+--  where the bottom-left group (chat, raid) and the top-left group (micro menu
+--  + open bag bar) meet the center column (bars + gryphons, stance bar +
+--  player frame, XP bar). Both widths are fixed in UI units, and the screen is
+--  768 / scale units tall, so the biggest scale that keeps them apart depends
+--  only on the screen's shape.
+-------------------------------------------------------------------------------
+ns.MIN_UI_SCALE = 0.64
+local CENTER_HALF = 380 -- widest half of the center column (stance bar / gryphon tip)
+local SIDE_REACH  = 420 -- right edge of the chat from the left screen edge
+local SIDE_MARGIN = 10
+
+function ns.MaxUIScale()
+    local w, h
+    if GetPhysicalScreenSize then w, h = GetPhysicalScreenSize() end
+    if not (w and h and h > 0) then w, h = UIParent:GetWidth(), UIParent:GetHeight() end
+    local max = 384 * (w / h) / (CENTER_HALF + SIDE_REACH + SIDE_MARGIN)
+    max = math.floor(max * 100 + 0.001) / 100 -- whole slider steps
+    return math.max(ns.MIN_UI_SCALE, math.min(1, max))
+end
+
+-- the scale Ironbark applies: the saved one, kept inside what this screen fits
+function ns.LayoutScale()
+    local s = tonumber(ns.db.uiScale) or ns.presets.ironbark.uiScale
+    s = math.floor(s * 100 + 0.5) / 100
+    return math.max(ns.MIN_UI_SCALE, math.min(ns.MaxUIScale(), s))
+end
+
+-- Set the game's UI scale now (no reload: the layout is the same at any scale).
+function ns.ApplyUIScale()
+    if not ns.db.manageUIScale then return end
+    if InCombatLockdown() then
+        ns.RunOutOfCombat("uiScale", ns.ApplyUIScale)
+        return
     end
+    SetCVar("useUiScale", "1")
+    SetCVar("uiScale", string.format("%.2f", ns.LayoutScale()))
+    -- EllesmereUI (kept for its QoL modules) scales UIParent itself at every
+    -- login from its own saved value: keep that value in step with ours.
+    local pp = EllesmereUI and EllesmereUI.PP
+    if pp and pp.SetUIScale and math.abs(UIParent:GetScale() - ns.LayoutScale()) > 0.001 then
+        pcall(pp.SetUIScale, ns.LayoutScale())
+    end
+end
+
+-- with the layout applied, the scale is ours at every login (see above)
+ns.OnLogin(function()
+    if ns.db.revert and EllesmereUI and EllesmereUI.PP then
+        C_Timer.After(1, ns.ApplyUIScale)
+    end
+end)
+
+local function ApplyCVars(preset)
+    ns.ApplyUIScale()
     local party = preset.unitFrames.Party
     if party and party.raidStyle ~= nil then
         SetCVar("useCompactPartyFrames", party.raidStyle and "1" or "0")

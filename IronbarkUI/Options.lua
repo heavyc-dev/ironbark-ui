@@ -36,8 +36,45 @@ local function Build()
         "Saves your current layout, keybinds, bars, chat tabs and game options, then applies Ironbark and reloads.")
     Button("Revert everything", function() StaticPopup_Show("IRONBARKUI_REVERTALL") end,
         "Puts back everything Ironbark changed, from the copy saved when you applied it.")
-    Checkbox("manageUIScale", "Use Ironbark's UI scale (0.64)",
-        "Set the game's UI scale when applying. Off: keep your own.")
+    Checkbox("manageUIScale", "Let Ironbark set the UI scale",
+        "Ironbark sets the game's UI scale to the slider below. Off: keep your own.")
+
+    -- UI scale: live once the layout is applied (it is the same layout at any
+    -- scale); before that it is simply what Apply will use. The top of the
+    -- slider is the biggest scale this screen fits without groups touching.
+    if Settings.CreateSlider and Settings.CreateSliderOptions then
+        local min, max = ns.MIN_UI_SCALE, ns.MaxUIScale()
+        ns.db.uiScale = ns.LayoutScale()
+        local scale = Settings.RegisterAddOnSetting(cat, "IRONBARKUI_uiScale", "uiScale",
+            ns.db, Settings.VarType.Number, "UI scale", ns.defaults.uiScale)
+        local pending, hinted
+        scale:SetValueChangedCallback(function()
+            if not (ns.db.manageUIScale and ns.db.revert) then return end -- used on Apply
+            if pending then return end
+            pending = true
+            -- wait for the drag to settle: rescaling moves the slider itself
+            C_Timer.After(0.4, function()
+                pending = nil
+                ns.ApplyUIScale()
+                if hinted then return end
+                hinted = true
+                if (ns.db.layoutVersion or 1) < ns.LAYOUT_VERSION then
+                    ns.Print("Your layout is from an older version: /ibui layout re-applies it so frames stay clear of each other at any scale.")
+                else
+                    ns.Print("UI scale set. /reload if anything looks out of place.")
+                end
+            end)
+        end)
+        if max > min then
+            local opts = Settings.CreateSliderOptions(min, max, 0.01)
+            if opts.SetLabelFormatter and MinimalSliderWithSteppersMixin then
+                opts:SetLabelFormatter(MinimalSliderWithSteppersMixin.Label.Right,
+                    function(v) return ("%d%%"):format(v * 100 + 0.5) end)
+            end
+            Settings.CreateSlider(cat, scale, opts,
+                "How big the whole interface is. Every part of the layout grows from its own screen edge, so nothing overlaps; the slider stops at the biggest size your screen fits. 64% is Ironbark's default.")
+        end
+    end
 
     Header("Frames")
     Checkbox("classColors", "Class-colored health",
@@ -49,20 +86,27 @@ local function Build()
         function() if ns.UpdateCastGhost then ns.UpdateCastGhost() end end)
     Checkbox("tooltipCursor", "Tooltips follow mouse",
         "Tooltips that normally sit in the bottom-right corner appear beside your cursor instead. Off: they stay in the corner, above the meters.")
-    Checkbox("tooltipCombatHide", "Hide tooltips in combat",
-        "No tooltips while you're in combat. Hold Alt while pointing at something to see its tooltip anyway.")
+    Checkbox("tooltipCombatHide", "Fewer tooltips in combat",
+        "In combat, no tooltips for friendly units (players, pets, NPCs and their frames) or action buttons. Enemies, items, loot, buffs and debuffs, the minimap and interface buttons keep theirs. Hold Alt to see a hidden one anyway.")
 
     Header("Party & raid")
     Checkbox("buffReminders", "Missing buff reminders",
-        "Glowing icons on you, party and raid frames for your buffs they're missing (click to cast). Out of combat only.",
+        "Glowing icons on you, party and raid frames for your buffs they're missing and debuffs you can remove (click to cast).",
         function() if ns.RefreshBuffReminders then ns.RefreshBuffReminders() end end)
-    Checkbox("hotIcons", "Your HoTs on party frames",
-        "Your heal-over-time spells and shields (Rejuvenation, Regrowth, Renew, Power Word: Shield) under the left side of each teammate's frame, with a timer. Updates in combat.",
+    Checkbox("buffCombat", "Reminders in combat too",
+        "Keeps the buff and dispel icons clickable in combat: bright while needed, hidden while not (the game hides auras in combat, so buffs go by what was missing just before the pull; debuffs you can remove are drawn by the game itself on party frames, and sit dim in raids). Their spots are fixed when combat starts, so a hidden spot still casts if you click it.",
+        function() if ns.RefreshBuffReminders then ns.RefreshBuffReminders() end end)
+    Checkbox("hotIcons", "Your HoTs on your and party frames",
+        "Your heal-over-time spells and shields (Rejuvenation, Regrowth, Renew, Power Word: Shield) under the left side of your own and each teammate's frame, with a timer. Updates in combat.",
         function() if ns.RefreshHots then ns.RefreshHots() end end)
+
+    Checkbox("hotBars", "HoT healing on health bars",
+        "A lighter green stretch past the end of someone's health: what your Rejuvenation, Regrowth or Renew still has to heal them, stopping at full. On your own, target, party and raid frames. Works from your own casts, so other healers' HoTs aren't included.",
+        function() if ns.RefreshHotBars then ns.RefreshHotBars() end end)
 
     Header("Bags")
     Checkbox("combinedBags", "One bag window",
-        "All bags in one window with a category sort and a Sections view. Turning off needs /reload.",
+        "All bags in one window with a category sort and a Sections view. Stands down while EllesmereUI's bags are enabled. Turning off needs /reload.",
         function() if ns.RefreshBags then ns.RefreshBags() end end)
 
     Header("Chat")
@@ -81,8 +125,11 @@ local function Build()
 
     Header("Quests")
     Checkbox("questTracker", "Ironbark quest tracker",
-        "Grouped by zone under the minimap. Click a zone to collapse, Ctrl-click to pin, right-click a quest to hide its objectives.",
+        "Grouped by zone under the minimap. Click a zone to collapse, Ctrl-click to pin; right-click a quest, zone or the title for a menu (stop tracking, share, abandon...). Mouse wheel scrolls.",
         function() if ns.RefreshQuest then ns.RefreshQuest() end end)
+
+    Checkbox("gatherPopups", "Gathering pop-ups",
+        "What you skin, mine, pick or fish flashes mid-screen like quest progress does: \"Light Leather +2 (14)\", the bracket being how many you now carry. Gathering skill-ups too.")
 
     Header("Minimap")
     Checkbox("minimapCollect", "Tuck addon buttons into one button",

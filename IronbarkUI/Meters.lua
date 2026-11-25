@@ -64,10 +64,16 @@ local function InInstance()
     return inside and (kind == "party" or kind == "raid")
 end
 
+-- Combat as the events tell it: when PLAYER_REGEN_DISABLED arrives the
+-- lockdown hasn't started yet, so asking InCombatLockdown() right then says
+-- "no" and the meters stayed hidden for the whole fight.
+local fighting = false
+local function InCombat() return fighting or InCombatLockdown() end
+
 local function ShouldShow()
     if ns.meterTest then return true end
     if not ns.db.meters then return false end
-    return InInstance() or InCombatLockdown() or GetTime() < lingerUntil
+    return InInstance() or InCombat() or GetTime() < lingerUntil
 end
 
 -------------------------------------------------------------------------------
@@ -341,7 +347,7 @@ local function Update()
     end
     for _, w in pairs(windows) do pcall(FillWindow, w) end
     -- idle in a dungeon (between pulls): half visible unless hovered
-    local idle = not InCombatLockdown() and not ns.meterTest and not container:IsMouseOver()
+    local idle = not InCombat() and not ns.meterTest and not container:IsMouseOver()
     container:SetAlpha(idle and IDLE_ALPHA or 1)
     -- refresh while visible; stops itself when hidden
     if not ticker then ticker = C_Timer.NewTicker(0.25, Update) end
@@ -372,7 +378,11 @@ end
 
 local ev = CreateFrame("Frame")
 ev:SetScript("OnEvent", function(_, event)
-    if event == "PLAYER_REGEN_ENABLED" then lingerUntil = GetTime() + LINGER end
+    if event == "PLAYER_REGEN_DISABLED" then fighting = true end
+    if event == "PLAYER_REGEN_ENABLED" then
+        fighting = false
+        lingerUntil = GetTime() + LINGER
+    end
     Update()
     if event == "PLAYER_REGEN_ENABLED" then C_Timer.After(LINGER + 0.1, Update) end
 end)

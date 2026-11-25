@@ -16,10 +16,10 @@
 --  to you. Rogue poisons are items, not spells, so they aren't tracked.
 --  Only buffs you have learned are checked. Dead/offline members are skipped.
 --
---  Aura data can be hidden from addons in combat on this client, so icons are
---  only shown out of combat (they hide when combat starts). Each icon is our
---  own secure spell button (click = cast that buff on that unit), configured
---  only out of combat; the party frames themselves are never touched.
+--  Each icon is our own secure spell button (click = cast that buff on that
+--  unit), configured only out of combat; the party frames themselves are never
+--  touched. In combat (see "Combat" below) the buttons sit in fixed slots and
+--  only their looks change; aura data the client hides then reads as "unknown".
 -------------------------------------------------------------------------------
 local _, ns = ...
 
@@ -121,29 +121,46 @@ local function Resolve()
     end
 end
 
--- Debuffs on unit that you can remove: { [type] = { icon } } (one per type).
--- Empty when debuff info is hidden (combat) or you have no dispels.
+-- does the client say auras are hidden from addons right now?
+local function AurasHidden()
+    local cs = C_Secrets
+    if not (cs and cs.ShouldAurasBeSecret) then return false end
+    local ok, secret = pcall(cs.ShouldAurasBeSecret)
+    return not ok or isSecret(secret) or secret == true
+end
+
+-- Debuffs on unit that you can remove: { [type] = { icon } } (one per type),
+-- and whether some couldn't be read (hidden in combat). Empty when you have
+-- no dispels.
 local function Dispellable(unit)
     local found = {}
-    if not (myDispels and next(myDispels) and C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return found end
-    if not UnitIsFriend("player", unit) then return found end
+    if not (myDispels and next(myDispels) and C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return found, false end
+    if not UnitIsFriend("player", unit) then return found, false end
+    local unknown = AurasHidden()
     for i = 1, 40 do
         local aura = C_UnitAuras.GetAuraDataByIndex(unit, i, "HARMFUL")
         if not aura then break end
         local kind = aura.dispelName
-        if kind and not isSecret(kind) and myDispels[kind] and not found[kind] then
+        if isSecret(kind) then
+            unknown = true
+        elseif kind and myDispels[kind] and not found[kind] then
             found[kind] = { icon = aura.icon }
         end
     end
-    return found
+    return found, unknown
 end
 
 -- true / false, or nil when the auras can't be read right now
 local function HasBuff(unit, names)
     if not (C_UnitAuras and C_UnitAuras.GetAuraDataByIndex) then return nil end
+    if AurasHidden() then return nil end
     for i = 1, 40 do
         local aura = C_UnitAuras.GetAuraDataByIndex(unit, i, "HELPFUL")
-        if not aura then return false end
+        if not aura then
+            -- in combat an empty list can mean "hidden" rather than "no buffs"
+            if i == 1 and InCombatLockdown() then return nil end
+            return false
+        end
         local name = aura.name
         if isSecret(name) then return nil end
         if names[name] then return true end
@@ -173,6 +190,11 @@ local function Wants(unit, who, tankAssigned)
     end
 end
 
+-- What each unit had the last time its buffs could be read (out of combat):
+-- lastHad[unit][buff's spell] = true / false. Auras are already hidden by the
+-- time combat is announced, so the combat icons start from this.
+local lastHad = {}
+
 -- Is this buff missing on unit? (weapon imbues: no main-hand enchant on you)
 local function Missing(unit, b, tankAssigned)
     if b.weapon then
@@ -180,7 +202,13 @@ local function Missing(unit, b, tankAssigned)
         local has = GetWeaponEnchantInfo()
         return not has
     end
-    return Wants(unit, b.who, tankAssigned) and HasBuff(unit, b.names) == false
+    if not Wants(unit, b.who, tankAssigned) then return false end
+    local has = HasBuff(unit, b.names)
+    if has ~= nil and b.cast then
+        lastHad[unit] = lastHad[unit] or {}
+        lastHad[unit][b.cast] = has
+    end
+    return has == false
 end
 
 -- what the icon casts on unit: the mana version for mana users (Wisdom)
@@ -285,7 +313,7 @@ local function Icon(h, i)
     f:SetAttribute("type1", "spell")
     f:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
     f:SetScript("OnEnter", function(self)
-        if not self.spellID then return end
+        if not self.spellID or self:GetAlpha() == 0 then return end
         GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
         GameTooltip:SetSpellByID(self.spellID)
         GameTooltip:AddLine("Click to cast on " .. (UnitName(self:GetAttribute("unit") or "") or "them"), 0.4, 1, 0.4)
@@ -318,15 +346,9 @@ local function HideAll()
     for _, h in pairs(holders) do h:Hide() end
 end
 
-local function Update()
-    if InCombatLockdown() then return end -- hidden at combat start; refreshed after
-    if not ns.db.buffReminders or not myBuffs or (#myBuffs == 0 and not next(myDispels or {})) then
-        HideAll()
-        return
-    end
-    local tankAssigned = GroupHasTank()
-    -- every frame that can show a person; missing ones are skipped (no gaps,
-    -- or ipairs would stop early and drop everything after a missing frame)
+-- every frame that can show a person; missing ones are skipped (no gaps,
+-- or ipairs would stop early and drop everything after a missing frame)
+local function Members()
     local members = {}
     local function add(f) if f then members[#members + 1] = f end end
     add(PlayerFrame) -- your own frame too, solo or grouped
@@ -339,15 +361,33 @@ local function Update()
         end
         for i = 1, 40 do add(_G["CompactRaidFrame" .. i]) end
     end
-    for _, m in ipairs(members) do
+    return members
+end
+
+-- same on-screen size as auras on the target frame, whatever the party
+-- frame's own scale
+local function FitHolder(h, m)
+    local ref = TargetFrame or UIParent
+    local ms = m:GetEffectiveScale()
+    if ms and ms > 0 then h:SetScale(ref:GetEffectiveScale() / ms) end
+end
+
+local HideDispelEngines -- combat's debuff displays (below)
+
+local function Update()
+    if InCombatLockdown() then return end -- combat has its own pass (below)
+    if HideDispelEngines then HideDispelEngines() end
+    if not ns.db.buffReminders or not myBuffs or (#myBuffs == 0 and not next(myDispels or {})) then
+        HideAll()
+        return
+    end
+    local tankAssigned = GroupHasTank()
+    for _, m in ipairs(Members()) do
         if m then
             local unit = m.unit or m:GetAttribute("unit")
             local h = Holder(m)
-            -- same on-screen size as auras on the target frame, whatever the
-            -- party frame's own scale
-            local ref = TargetFrame or UIParent
-            local ms = m:GetEffectiveScale()
-            if ms and ms > 0 then h:SetScale(ref:GetEffectiveScale() / ms) end
+            FitHolder(h, m)
+            h.combat = nil
             local n = 0
             if unit and m:IsVisible() and UnitExists(unit) and UnitIsConnected(unit) and not UnitIsDeadOrGhost(unit) then
                 for _, b in ipairs(myBuffs) do
@@ -360,6 +400,8 @@ local function Update()
                         f.spellID = sid
                         f:SetAttribute("spell1", cast)
                         f:SetAttribute("unit", unit)
+                        f.slot = nil
+                        f:SetAlpha(1)
                         f:Show()
                         if ns.db.buffGlow then GlowOn(f, nil) else GlowOff(f) end
                     end
@@ -376,6 +418,8 @@ local function Update()
                     f.spellID = myDispels[kind].spellID
                     f:SetAttribute("spell1", myDispels[kind].cast)
                     f:SetAttribute("unit", unit)
+                    f.slot = nil
+                    f:SetAlpha(1)
                     f:Show()
                     GlowOn(f, c)
                 end
@@ -384,6 +428,240 @@ local function Update()
             h:SetShown(n > 0)
         end
     end
+end
+
+-------------------------------------------------------------------------------
+--  Combat. Secure buttons can't be shown, hidden or re-aimed once combat
+--  starts, so just before it does every member gets a full set in fixed slots:
+--  each buff they should have from you, then each dispel you know. From then
+--  on only looks change (always allowed): a slot is bright and glowing while
+--  it's needed, invisible while it isn't (dispel slots: dim when there is no
+--  telling).
+--  An invisible slot still casts if clicked.
+--
+--  This client hides every aura from addons for the whole fight, so "needed"
+--  can't be read then. Buffs go by what was missing at the pull, minus what
+--  you have cast since. Dispels are handed to the game's own aura display
+--  (an "AuraContainer", as for the HoT icons further down): one per dispel
+--  slot, told to draw debuffs of that slot's types on that unit. It still
+--  sees them in combat, so the debuff's icon appears right on top of our
+--  (then invisible) dispel button, and clicks fall through to the button.
+--  Party and your own frame only; in a raid, or if the display isn't
+--  available, the dispel buttons just sit dim.
+-------------------------------------------------------------------------------
+local KIND_ORDER = { "Magic", "Curse", "Poison", "Disease" }
+
+local dispelEngines = {} -- [button] = { [kinds key] = { host, container, unit } }
+local dispelEngineOK     -- nil = not tried, false = unavailable
+
+local function InitDispelButton(button, color)
+    pcall(button.SetMouseClickEnabled, button, false)
+    if button.SetMouseMotionEnabled then pcall(button.SetMouseMotionEnabled, button, false) end
+    button:SetSize(ICON, ICON)
+    local border = button:CreateTexture(nil, "BACKGROUND")
+    border:SetPoint("TOPLEFT", -2, 2)
+    border:SetPoint("BOTTOMRIGHT", 2, -2)
+    border:SetColorTexture(color[1], color[2], color[3], 1)
+    local icon = button:CreateTexture(nil, "ARTWORK")
+    icon:SetAllPoints(button)
+    icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
+    button:SetIcon(icon)
+end
+
+local function DispelEngine(f, kinds)
+    if dispelEngineOK == false then return nil end
+    local key = table.concat(kinds, ",")
+    dispelEngines[f] = dispelEngines[f] or {}
+    local e = dispelEngines[f][key]
+    if e then return e end
+    if C_AddOns and C_AddOns.LoadAddOn and not C_AddOns.IsAddOnLoaded("Blizzard_AuraContainer") then
+        pcall(C_AddOns.LoadAddOn, "Blizzard_AuraContainer")
+    end
+    local host = CreateFrame("Frame", nil, UIParent)
+    host:SetSize(ICON, ICON)
+    host:EnableMouse(false)
+    host:Hide()
+    local ok, c = pcall(CreateFrame, "AuraContainer", nil, host, "CustomAuraContainerTemplate")
+    if not ok or not c or not c.AddAuraGroup then
+        dispelEngineOK = false
+        return nil
+    end
+    c:SetPoint("TOPLEFT", host, "TOPLEFT")
+    c:SetSize(1, 1)
+    local anchorFn = c.SetFlowLayoutAnchorPoint or c.SetAuraLayoutAnchorPoint
+    if anchorFn then pcall(anchorFn, c, "TOPLEFT") end
+    local types = {}
+    for _, kind in ipairs(kinds) do types[kind] = true end
+    local color = DEBUFF_COLORS[kinds[1]] or { 1, 0, 0 }
+    local okGroup = pcall(c.AddAuraGroup, c, "dispel", "HARMFUL", {
+        maxFrameCount = 1,
+        candidateFilters = { includeDispelTypes = types },
+        initializeFrame = function(button) InitDispelButton(button, color) end,
+    })
+    if not okGroup then
+        dispelEngineOK = false
+        return nil
+    end
+    dispelEngineOK = true
+    e = { host = host, container = c }
+    dispelEngines[f][key] = e
+    return e
+end
+
+function HideDispelEngines()
+    for _, byKey in pairs(dispelEngines) do
+        for _, e in pairs(byKey) do e.host:Hide() end
+    end
+end
+
+-- out of combat: sit the display exactly on its dispel button
+local function PlaceDispelEngine(f, unit)
+    local s = f.slot
+    s.engine = nil
+    local x, y = f:GetLeft(), f:GetTop()
+    if not (x and y) then return end
+    local e = DispelEngine(f, s.kinds)
+    if not e then return end
+    local host = e.host
+    host:SetScale(f:GetEffectiveScale() / UIParent:GetEffectiveScale())
+    host:SetFrameStrata(f:GetFrameStrata())
+    host:SetFrameLevel(f:GetFrameLevel() + 5)
+    host:ClearAllPoints()
+    host:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", x, y) -- same effective scale as the button
+    if e.unit ~= unit then
+        e.container:SetUnit(unit)
+        e.unit = unit
+    end
+    host:Show()
+    if e.container.UpdateAllAuras then e.container:UpdateAllAuras() end
+    s.engine = true
+end
+
+-- state: true = needed, false = not, nil = can't tell right now
+local function Paint(f, state, icon, color)
+    if state == false then
+        f:SetAlpha(0)
+        GlowOff(f)
+        return
+    end
+    f.tex:SetTexture(icon)
+    f.border:SetShown(color ~= nil)
+    if color then f.border:SetVertexColor(color[1], color[2], color[3]) end
+    f:SetAlpha(state and 1 or 0.35)
+    if state then GlowOn(f, color) else GlowOff(f) end
+end
+
+local function PaintCombat()
+    for _, h in pairs(holders) do
+        if h.combat then
+            local unit = h.unit
+            local alive = UnitExists(unit) and UnitIsConnected(unit) and not UnitIsDeadOrGhost(unit)
+            local found, unknown
+            for _, f in ipairs(h.icons) do
+                local s = f.slot
+                if s and not alive then
+                    Paint(f, false)
+                elseif s and s.buff then
+                    local state
+                    if s.buff.weapon then
+                        state = not GetWeaponEnchantInfo()
+                    else
+                        local has = HasBuff(unit, s.buff.names)
+                        if has ~= nil then state = not has end
+                    end
+                    if state == nil then state = s.missing end -- as of the pull
+                    Paint(f, state, s.icon)
+                elseif s then
+                    if not found then found, unknown = Dispellable(unit) end
+                    local hit
+                    for _, kind in ipairs(s.kinds) do
+                        if found[kind] then hit = kind break end
+                    end
+                    local state = false
+                    -- unreadable: the game's display on top of the slot shows it (or dim without one)
+                    if hit then state = true elseif unknown and not s.engine then state = nil end
+                    Paint(f, state, hit and found[hit].icon or s.icon, DEBUFF_COLORS[hit or s.kinds[1]])
+                end
+            end
+        end
+    end
+end
+
+-- on PLAYER_REGEN_DISABLED: lockdown starts right after this event
+local function PrepareCombat()
+    if InCombatLockdown() then return end
+    if not (ns.db.buffReminders and ns.db.buffCombat) or not myBuffs
+        or (#myBuffs == 0 and not next(myDispels or {})) then
+        HideAll()
+        return
+    end
+    local tankAssigned = GroupHasTank()
+    HideDispelEngines()
+    for _, m in ipairs(Members()) do
+        local unit = m.unit or m:GetAttribute("unit")
+        local h = Holder(m)
+        FitHolder(h, m)
+        local n = 0
+        local function Slot(cast, sid, slot)
+            n = n + 1
+            local f = Icon(h, n)
+            f.spellID = sid
+            f.slot = slot
+            f:SetAttribute("spell1", cast)
+            f:SetAttribute("unit", unit)
+            f:Show()
+        end
+        if unit and m:IsVisible() and UnitExists(unit) then
+            for _, b in ipairs(myBuffs) do
+                local applies
+                if b.weapon then
+                    applies = UnitIsUnit(unit, "player")
+                else
+                    applies = Wants(unit, b.who, tankAssigned)
+                end
+                if applies then
+                    local cast, icon, sid = CastFor(unit, b)
+                    -- unreadable here (combat is already on): go by the last
+                    -- out-of-combat look; never seen = assume they have it
+                    local missing = false
+                    if b.weapon then
+                        missing = not GetWeaponEnchantInfo()
+                    else
+                        local has = HasBuff(unit, b.names)
+                        if has == nil then has = lastHad[unit] and lastHad[unit][b.cast] end
+                        if has ~= nil then missing = not has end
+                    end
+                    Slot(cast, sid, { buff = b, icon = icon, cast = cast, missing = missing })
+                end
+            end
+            -- one slot per dispel spell (Cleanse covers three debuff types)
+            local bySpell = {}
+            for _, kind in ipairs(KIND_ORDER) do
+                local d = myDispels and myDispels[kind]
+                if d then
+                    local s = bySpell[d.cast]
+                    if s then
+                        s.kinds[#s.kinds + 1] = kind
+                    else
+                        s = { kinds = { kind }, icon = C_Spell.GetSpellTexture(d.spellID) }
+                        bySpell[d.cast] = s
+                        Slot(d.cast, d.spellID, s)
+                    end
+                end
+            end
+        end
+        for k = n + 1, #h.icons do h.icons[k]:Hide() end
+        h.unit = unit
+        h.combat = n > 0
+        h:SetShown(n > 0)
+        if n > 0 and not IsInRaid() then
+            for k = 1, n do
+                local f = h.icons[k]
+                if f.slot and f.slot.kinds then pcall(PlaceDispelEngine, f, unit) end
+            end
+        end
+    end
+    pcall(PaintCombat)
 end
 
 -------------------------------------------------------------------------------
@@ -438,7 +716,7 @@ if type(PartyMemberFrame_RefreshBuffs) == "function" then
 end
 
 -------------------------------------------------------------------------------
---  Your HoTs on teammates: under the left side of each classic party frame
+--  Your HoTs: under the left side of your own frame and each classic party frame
 --  (mirroring the reminders on the right), with a timer sweep. Display only,
 --  so they keep updating in combat. Asked for by name with the PLAYER filter
 --  (= cast by you), which works in combat; timers only when readable.
@@ -581,10 +859,18 @@ local function EngineFor(m)
     return e
 end
 
+-- the frames that get HoT icons: your own, then each party member's
+local function HotFrames()
+    local list = {}
+    if PlayerFrame and PlayerFrame.unit then list[#list + 1] = PlayerFrame end
+    for _, m in ipairs(ns.ClassicPartyMembers and ns.ClassicPartyMembers() or {}) do list[#list + 1] = m end
+    return list
+end
+
 -- out of combat: put each host under its frame's left side and bind its unit
 local function PlaceEngineHots()
     if InCombatLockdown() then return end
-    for _, m in ipairs(ns.ClassicPartyMembers and ns.ClassicPartyMembers() or {}) do
+    for _, m in ipairs(HotFrames()) do
         local e = EngineFor(m)
         if not e then return end
         local anchor = m.manabar or m
@@ -615,7 +901,7 @@ local function UpdateHots()
         PlaceEngineHots()
         if engineOK then return end -- the game draws them from here on
     end
-    local list = ns.ClassicPartyMembers and ns.ClassicPartyMembers() or {}
+    local list = HotFrames()
     local on = ns.db.hotIcons and myHots and #myHots > 0 and C_UnitAuras and C_UnitAuras.GetAuraDataBySpellName
     for _, m in ipairs(list) do
         local unit = m.unit
@@ -656,7 +942,7 @@ do
     hotEv:SetScript("OnEvent", function(_, event, unit)
         if event == "UNIT_SPELLCAST_SUCCEEDED" then
             if unit == "player" then Soon() end
-        elseif unit and unit:match("^party%d$") then
+        elseif unit and (unit == "player" or unit:match("^party%d$")) then
             pcall(UpdateHots)
         end
     end)
@@ -667,6 +953,27 @@ do
     end)
 end
 
+-- you cast one of your buffs in combat: that slot is done. A group version
+-- (not the slot's own spell) covers everyone.
+local buffSentTo = {}
+local function OnBuffCast(spell)
+    local target = buffSentTo[spell]
+    buffSentTo[spell] = nil
+    for _, h in pairs(holders) do
+        if h.combat then
+            local ok, name = pcall(UnitName, h.unit)
+            local same = ok and name and not isSecret(name) and name == target
+            for _, f in ipairs(h.icons) do
+                local s = f.slot
+                if s and s.buff and (s.buff.names and s.buff.names[spell] or s.cast == spell)
+                    and (same or s.cast ~= spell) then
+                    s.missing = false
+                end
+            end
+        end
+    end
+end
+
 local pending = false
 local function Queue()
     if pending then return end
@@ -674,7 +981,7 @@ local function Queue()
     C_Timer.After(0.2, function()
         pending = false
         -- each step on its own: one failing must not stop the others
-        pcall(Update)
+        if InCombatLockdown() then pcall(PaintCombat) else pcall(Update) end
         pcall(HookPartyAuras)
         pcall(UpdateHots)
     end)
@@ -729,9 +1036,25 @@ function ns.BuffStats()
 end
 
 local ev = CreateFrame("Frame")
-ev:SetScript("OnEvent", function(_, event, unit)
+ev:SetScript("OnEvent", function(_, event, unit, a2, a3, a4)
+    if event == "UNIT_SPELLCAST_SENT" or event == "UNIT_SPELLCAST_SUCCEEDED" then
+        if unit ~= "player" or not InCombatLockdown() then return end
+        local id = event == "UNIT_SPELLCAST_SENT" and a4 or a3
+        if not id or isSecret(id) then return end
+        local spell = C_Spell.GetSpellName(id)
+        if not spell then return end
+        if event == "UNIT_SPELLCAST_SENT" then
+            local target = a2
+            if isSecret(target) or not target or target == "" then target = UnitName("player") end
+            buffSentTo[spell] = target
+            return
+        end
+        if buffSentTo[spell] == nil then return end
+        pcall(OnBuffCast, spell)
+    end
     if event == "SPELLS_CHANGED" or event == "LEARNED_SPELL_IN_TAB" then Resolve() ResolveHots() end
-    if event == "PLAYER_REGEN_DISABLED" then HideAll() return end
+    if event == "GROUP_ROSTER_UPDATE" and not InCombatLockdown() then wipe(lastHad) end
+    if event == "PLAYER_REGEN_DISABLED" then PrepareCombat() return end
     if event == "UNIT_AURA" and unit ~= "player"
         and not (unit and (unit:match("^party%d$") or unit:match("^raid%d+$"))) then return end
     Queue()
@@ -743,7 +1066,8 @@ ns.OnLogin(function()
     ResolveHots()
     for _, e in ipairs({ "UNIT_AURA", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD",
         "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED", "SPELLS_CHANGED", "UNIT_CONNECTION",
-        "UNIT_FLAGS", "PLAYER_ROLES_ASSIGNED", "UNIT_INVENTORY_CHANGED" }) do
+        "UNIT_FLAGS", "PLAYER_ROLES_ASSIGNED", "UNIT_INVENTORY_CHANGED",
+        "UNIT_SPELLCAST_SENT", "UNIT_SPELLCAST_SUCCEEDED" }) do
         pcall(ev.RegisterEvent, ev, e)
     end
     if CompactPartyFrame then CompactPartyFrame:HookScript("OnShow", Queue) end

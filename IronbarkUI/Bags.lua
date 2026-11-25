@@ -696,6 +696,8 @@ function ns.RefreshBags()
     BuildBagArrow()
     ApplyBagBar()
     if not ns.db.combinedBags then return end
+    -- another bag addon is running: leave the bags to it
+    if C_AddOns and C_AddOns.IsAddOnLoaded and C_AddOns.IsAddOnLoaded("EllesmereUIBags") then return end
     local r = ns.db.revert
     for _, name in ipairs({ "combinedBags", "expandBagBar" }) do
         if r and r.cvars and r.cvars[name] == nil then r.cvars[name] = GetCVar(name) end

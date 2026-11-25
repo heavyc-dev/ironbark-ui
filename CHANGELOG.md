@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.1.0
+
+- UI scale slider (Options > Setup), 64% up to the biggest size your screen
+  fits. The cast bar, player/target and party row are now placed from the
+  bottom edge instead of the screen's center, so scaling up never pushes them
+  into the action bars. Existing users are offered the updated layout at login.
+- Quest tracker right-click menus: open, hide objectives, stop tracking,
+  link in chat, share and abandon on a quest; pin / collapse on a zone; track
+  all again, sort and collapse / expand all on the title.
+- Quest tracker scrolls with the mouse wheel when the list is taller than
+  its window (it used to stop at "+N more").
+- Your HoT icons also show under your own frame, not just party frames.
+- HoT healing on health bars: what your HoTs still have to heal, drawn past
+  the end of the health fill on your, target, party and raid frames.
+- Gathering pop-ups: skinned, mined, picked and fished items flash mid-screen
+  like quest progress, with how many you now carry; gathering skill-ups too.
+- Buff and dispel reminder icons stay up and clickable in combat (new switch,
+  on by default).
+- Tooltips in combat: only friendly units and action buttons hide theirs now.
+  Enemies, items, loot, buffs and debuffs, minimap pins and interface buttons
+  show as usual.
+- Plays along with EllesmereUI's QoL modules: Ironbark's bag window stands down
+  while EllesmereUI's bags are enabled, and the UI scale stays the one set here.
+
 ## 1.0.0
 
 First release.

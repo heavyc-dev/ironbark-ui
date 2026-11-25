@@ -6,6 +6,7 @@
   .\tools\ui-switch.ps1 status
   .\tools\ui-switch.ps1 backup -Label baseline -IncludeAddOns
   .\tools\ui-switch.ps1 ironbark      # test Ironbark UI
+  .\tools\ui-switch.ps1 hybrid        # Ironbark look + EllesmereUI QoL and bags
   .\tools\ui-switch.ps1 ellesmere     # go back to exactly how things were
   .\tools\ui-switch.ps1 restore -Zip .\backups\2026-11-20_1130-baseline.zip
 
@@ -19,7 +20,7 @@
 #>
 param(
     [Parameter(Position = 0)]
-    [ValidateSet('status', 'backup', 'ironbark', 'ellesmere', 'restore')]
+    [ValidateSet('status', 'backup', 'ironbark', 'hybrid', 'ellesmere', 'restore')]
     [string]$Action = 'status',
     [string]$Label = 'manual',
     [switch]$IncludeAddOns,
@@ -38,6 +39,13 @@ $SourcePath = Join-Path $RepoDir 'IronbarkUI'
 
 # Addons turned off while testing Ironbark (anything starting with these names).
 $EllesmerePrefixes = @('EllesmereUI', 'Tust_EUI')
+
+# 'hybrid': Ironbark does the look, EllesmereUI keeps only the parts that
+# don't restyle anything (plus its bags). Its framework, options panel and
+# translations have to stay on for those to work.
+$EllesmereKeep = @('EllesmereUI', 'EllesmereUIOptions', 'EllesmereUILocales',
+                   'EllesmereUIQoL', 'EllesmereUIForeverEssentials', 'EllesmereUIQuickdraw',
+                   'EllesmereUIBags')
 
 function Write-Step($msg) { Write-Host "==> $msg" -ForegroundColor Cyan }
 
@@ -185,6 +193,21 @@ switch ($Action) {
         Write-Host ''
         Write-Host 'Ironbark mode on. Launch WoW; you will be asked to apply the layout.' -ForegroundColor Green
         Write-Host "To go back: in game type /ibui revert, exit WoW, then run: .\tools\ui-switch.ps1 ellesmere"
+    }
+    'hybrid' {
+        Assert-WowClosed
+        New-Backup 'before-hybrid' | Out-Null
+        Install-Link
+        Write-Step 'Enabling IronbarkUI + EllesmereUI QoL and bags; other EllesmereUI modules off (all characters)'
+        $wanted = @{ 'IronbarkUI' = 'enabled' }
+        foreach ($n in $EllesmereKeep) {
+            if (Test-Path (Join-Path $AddOnsDir $n)) { $wanted[$n] = 'enabled' }
+        }
+        Set-AddOnStates $wanted $EllesmerePrefixes
+        $state = Get-State   # keep the original revert point, if there is one
+        Save-State ([pscustomobject]@{ mode = 'ironbark'; ironbarkBackup = $state.ironbarkBackup })
+        Write-Host ''
+        Write-Host 'Ironbark with EllesmereUI QoL + bags. Launch WoW; /ibui layout if frames look out of place.' -ForegroundColor Green
     }
     'ellesmere' {
         Assert-WowClosed
