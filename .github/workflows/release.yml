@@ -12,20 +12,32 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  # re-run for a tag that already exists (e.g. after fixing this file):
+  #   gh workflow run release.yml -f tag=v1.2.3
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)release, e.g. v1.2.3"
+        required: true
 
 permissions:
   contents: write
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
 
       - name: Version
         id: v
         run: |
-          tag="${GITHUB_REF_NAME#v}"
+          tag="${TAG#v}"
           toc=$(grep -m1 '^## Version:' IronbarkUI/IronbarkUI.toc | sed 's/^## Version:[[:space:]]*//' | tr -d '\r')
           if [ "$tag" != "$toc" ]; then
             echo "Tag v$tag does not match the TOC version $toc" >&2
@@ -52,10 +64,10 @@ jobs:
         run: |
           zip="IronbarkUI-${{ steps.v.outputs.version }}.zip"
           # a re-run replaces the zip on the existing release
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$zip" --clobber
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$zip" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" "$zip" \
+            gh release create "$TAG" "$zip" \
               --title "Ironbark UI ${{ steps.v.outputs.version }}" --notes-file notes.md
           fi
 
@@ -73,6 +85,6 @@ jobs:
               releaseType: "release", gameVersions: $versions}')
           curl --fail-with-body -sS \
             -H "X-Api-Token: $CF_API_KEY" \
-            -F "metadata=$metadata" \
+            --form-string "metadata=$metadata" \
             -F "file=@IronbarkUI-${{ steps.v.outputs.version }}.zip" \
             "https://wow.curseforge.com/api/projects/$CF_PROJECT_ID/upload-file"
