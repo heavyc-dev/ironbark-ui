@@ -80,7 +80,9 @@ local function Build()
     Checkbox("classColors", "Class-colored health",
         "Player, target, focus and party health in class colors. Turning off needs /reload.", ns.RefreshFrames)
     Checkbox("compactText", "Compact health text (961 | 100%)",
-        "One line of value | percent, shown on mouseover and in combat.", ns.RefreshFrames)
+        "One line of value | percent instead of the game's own wording.", ns.RefreshFrames)
+    Checkbox("alwaysText", "Always show health / mana numbers",
+        "On your own, target and party frames. Off: only on mouseover and in combat.", ns.RefreshFrames)
     Checkbox("castBarAlways", "Always show cast bar",
         "Keep an empty cast bar frame on screen between casts.",
         function() if ns.UpdateCastGhost then ns.UpdateCastGhost() end end)

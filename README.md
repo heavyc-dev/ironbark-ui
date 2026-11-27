@@ -44,8 +44,8 @@ the addon.
 
 ## What else it does
 
-- **Frames:** class-colored health; `961 | 100%` text on mouseover and in
-  combat; cast bar colored by spell type (heals green, channels blue, damage
+- **Frames:** class-colored health; `961 | 100%` text, always shown (or
+  only on mouseover and in combat); cast bar colored by spell type (heals green, channels blue, damage
   orange, utility gold); a mana regen spark for the 5 second rule.
 - **Buff & dispel reminders:** glowing icons on you, party and raid members for
   your buffs they're missing and debuffs you can remove (in their curse /

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.2
+
+- Health / mana numbers are now always shown on your own, target and party
+  frames, not just on mouseover and in combat (Options > "Always show health
+  / mana numbers" to go back).
+
 ## 1.1.1
 
 - Removed "HoT healing on health bars": it only worked some of the time. The

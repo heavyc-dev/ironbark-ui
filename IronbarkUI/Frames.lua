@@ -257,8 +257,9 @@ local function HookParty()
 end
 
 -------------------------------------------------------------------------------
---  Health/power text: mouseover always works (statusText CVar 0); during
---  combat we hold it shown by switching that CVar to 1 and back.
+--  Health/power text: mouseover always works (statusText CVar 0). With
+--  "always show" on (alwaysText) or during combat we hold it shown by
+--  switching that CVar to 1, and back to 0 when neither applies.
 --
 --  Not through the bars' ShowStatusBarText(): called from an addon it runs
 --  Blizzard's text update as addon code, which may not compare the (secret)
@@ -277,17 +278,17 @@ local function TextBars()
     return bars
 end
 
-local combatShown -- nil until the first call, so login always settles it
-local function SetCombatText(show)
-    show = show and true or false
-    if show == combatShown then return end
-    combatShown = show
+-- Goes by the CVar itself, not a remembered state, so it also recovers when
+-- something else (applying the layout, a crash mid-fight) changed it.
+local function SetCombatText(inCombat)
+    local show = (inCombat or ns.db.alwaysText) and true or false
+    local on = GetCVar("statusText") == "1"
     if show then
-        if GetCVar("statusText") == "1" then return end -- already always shown
-        ns.db.combatTextHeld = true -- survives a crash mid-fight: undone at next login
+        if on then return end
+        ns.db.combatTextHeld = true -- it was us: ours to switch back off
         pcall(SetCVar, "statusText", "1")
     else
-        if not ns.db.combatTextHeld then return end
+        if not on or not ns.db.combatTextHeld then return end -- off, or the player's own choice
         ns.db.combatTextHeld = nil
         pcall(SetCVar, "statusText", "0")
     end
@@ -461,7 +462,7 @@ ev:SetScript("OnEvent", function(_, event)
         SetCombatText(true)
         return
     end
-    if event == "PLAYER_REGEN_ENABLED" then SetCombatText(false) end
+    SetCombatText(event ~= "PLAYER_REGEN_ENABLED" and InCombatLockdown())
     if event ~= "GROUP_ROSTER_UPDATE" and event ~= "PLAYER_ROLES_ASSIGNED" then RecolorAll() end
     if event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "PLAYER_ENTERING_WORLD"
         or event == "EDIT_MODE_LAYOUTS_UPDATED" or event == "PLAYER_REGEN_ENABLED" then
