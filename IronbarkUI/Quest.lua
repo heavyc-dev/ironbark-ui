@@ -253,6 +253,9 @@ local function OnClick(self, button)
             local c = Store("questObjCollapsed")
             local key = self.questID or self.questTitle
             c[key] = (not c[key]) or nil
+        elseif IsShiftKeyDown() then
+            -- into the open chat line, or opens one with the link in it
+            LinkQuest(self.questID, self.questTitle)
         else
             OpenQuest(self.questID, self.questIndex)
         end

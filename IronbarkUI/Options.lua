@@ -123,7 +123,7 @@ local function Build()
 
     Header("Quests")
     Checkbox("questTracker", "Ironbark quest tracker",
-        "Grouped by zone under the minimap. Click a zone to collapse, Ctrl-click to pin; right-click a quest, zone or the title for a menu (stop tracking, share, abandon...). Mouse wheel scrolls.",
+        "Grouped by zone under the minimap. Click a zone to collapse, Ctrl-click to pin; Shift-click a quest to link it in chat; right-click a quest, zone or the title for a menu (stop tracking, share, abandon...). Mouse wheel scrolls.",
         function() if ns.RefreshQuest then ns.RefreshQuest() end end)
 
     Checkbox("gatherPopups", "Gathering pop-ups",

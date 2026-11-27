@@ -82,7 +82,7 @@ the addon.
   clickable links, sticky whispers, Up/Down history, spam filter, and loot from
   your group only.
 - **Quest tracker:** Ironbark's own, from your quest log, grouped by zone.
-  Background on hover; mouse wheel scrolls a long list; click to collapse, Ctrl-click a zone to pin it;
+  Background on hover; mouse wheel scrolls a long list; click to collapse, Ctrl-click a zone to pin it; Shift-click a quest to link it in chat;
   right-click a quest for a menu (open, hide objectives, stop tracking, link
   in chat, share, abandon), a zone or the title for theirs; only dungeon quests inside
   dungeons; fades in combat. Questie's and Blizzard's tracker windows are hidden

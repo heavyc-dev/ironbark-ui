@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.3
+
+- Quest tracker: Shift-click a quest to put its link in chat.
+
 ## 1.1.2
 
 - Health / mana numbers are now always shown on your own, target and party
