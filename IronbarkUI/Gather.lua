@@ -7,6 +7,9 @@
 --
 --  What counts as gathered: anything looted within a few seconds of finishing
 --  a gathering cast, plus leather, ore/stone and herbs however they arrive.
+--
+--  Loot pop-ups (lootPopups) do the same for everything else you pick up, the
+--  name in the item's quality color so a green stands out from the greys.
 -------------------------------------------------------------------------------
 local _, ns = ...
 
@@ -55,13 +58,22 @@ local function Flash(text)
     end
 end
 
+-- the item's name wrapped in its quality color (plain when it can't be told)
+local function Colored(itemID, name)
+    local q = C_Item.GetItemQualityByID and C_Item.GetItemQualityByID(itemID)
+    local c = q and ITEM_QUALITY_COLORS and ITEM_QUALITY_COLORS[q]
+    if c and c.hex then return c.hex .. name .. "|r" end
+    return name
+end
+
 -- several stacks of one item in one loot window become one line
-local pending, order = {}, {}
+local pending, order, gathered = {}, {}, {}
 local function Flush()
     for _, itemID in ipairs(order) do
         local got = pending[itemID]
         local name = C_Item.GetItemNameByID and C_Item.GetItemNameByID(itemID) or (GetItemInfo and GetItemInfo(itemID))
         local have = C_Item.GetItemCount and C_Item.GetItemCount(itemID) or 0
+        if name and not gathered[itemID] then name = Colored(itemID, name) end
         if name then
             if have and have > got then
                 Flash(("%s +%d (%d)"):format(name, got, have))
@@ -70,16 +82,23 @@ local function Flush()
             end
         end
     end
-    pending, order = {}, {}
+    pending, order, gathered = {}, {}, {}
 end
 
 local function OnLoot(msg)
-    if not ns.db.gatherPopups or type(msg) ~= "string" or isSecret(msg) then return end
+    if not (ns.db.gatherPopups or ns.db.lootPopups) or type(msg) ~= "string" or isSecret(msg) then return end
     for _, p in ipairs(Patterns()) do
         local link, count = msg:match(p[1])
         if link then
             local itemID = tonumber(link:match("item:(%d+)"))
-            if not itemID or not IsGathered(itemID) then return end
+            if not itemID then return end
+            local isGather = IsGathered(itemID)
+            if isGather then
+                if not ns.db.gatherPopups then return end
+            elseif not ns.db.lootPopups then
+                return
+            end
+            if isGather then gathered[itemID] = true end
             if not pending[itemID] then
                 order[#order + 1] = itemID
                 -- a moment later, so the bag count already includes it

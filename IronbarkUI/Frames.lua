@@ -258,7 +258,12 @@ end
 
 -------------------------------------------------------------------------------
 --  Health/power text: mouseover always works (statusText CVar 0); during
---  combat we hold it shown via the bars' own lock counter.
+--  combat we hold it shown by switching that CVar to 1 and back.
+--
+--  Not through the bars' ShowStatusBarText(): called from an addon it runs
+--  Blizzard's text update as addon code, which may not compare the (secret)
+--  health values and errors out, and it leaves the bar's lock counter written
+--  by an addon so every later update of that bar fails the same way.
 -------------------------------------------------------------------------------
 local function TextBars()
     local bars, frames = {}, UnitFrames()
@@ -272,17 +277,36 @@ local function TextBars()
     return bars
 end
 
-local combatShown = false
+local combatShown -- nil until the first call, so login always settles it
 local function SetCombatText(show)
+    show = show and true or false
     if show == combatShown then return end
     combatShown = show
+    if show then
+        if GetCVar("statusText") == "1" then return end -- already always shown
+        ns.db.combatTextHeld = true -- survives a crash mid-fight: undone at next login
+        pcall(SetCVar, "statusText", "1")
+    else
+        if not ns.db.combatTextHeld then return end
+        ns.db.combatTextHeld = nil
+        pcall(SetCVar, "statusText", "0")
+    end
+    -- the game re-reads the CVar at the bar's next change; until then show /
+    -- hide the text ourselves (plain widget calls, nothing of Blizzard's run)
     for _, bar in ipairs(TextBars()) do
-        if show then
-            if bar.ShowStatusBarText then bar:ShowStatusBarText()
-            elseif ShowTextStatusBarText then ShowTextStatusBarText(bar) end
-        else
-            if bar.HideStatusBarText then bar:HideStatusBarText()
-            elseif HideTextStatusBarText then HideTextStatusBarText(bar) end
+        local fs = bar.TextString
+        if fs then
+            if show then
+                fs:Show()
+                local unit = bar.unit
+                if ns.db.compactText and unit and UnitExists(unit) and not UnitIsDeadOrGhost(unit) then
+                    local f = bar:GetParent()
+                    while f and not f.healthbar do f = f:GetParent() end
+                    pcall((f and f.healthbar == bar) and HealthText or PowerText, fs, unit)
+                end
+            elseif not bar:IsMouseOver() then
+                fs:Hide()
+            end
         end
     end
 end

@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.1.1
+
+- Removed "HoT healing on health bars": it only worked some of the time. The
+  HoT icons under the frames stay.
+- Fixed a stream of "attempt to compare a secret number value" errors from
+  the player / target / party health and mana text once you had been in
+  combat. The text is now held on during fights through the game's own
+  status-text setting.
+- Loot pop-ups: every item you pick up flashes mid-screen like the gathering
+  pop-ups do, its name in the item's quality color (Options > Loot pop-ups).
+
 ## 1.1.0
 
 - UI scale slider (Options > Setup), 64% up to the biggest size your screen

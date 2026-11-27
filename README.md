@@ -69,10 +69,6 @@ the addon.
 - **Your HoTs and shields:** Rejuvenation, Regrowth, Renew and Power Word:
   Shield you've cast show under the left side of your own and each teammate's
   frame with a timer sweep, in combat too.
-- **HoT healing on health bars:** a lighter green stretch past the end of
-  someone's health shows what your Rejuvenation, Regrowth or Renew still has
-  to heal, stopping at full. Counted from your own casts (works in combat);
-  other healers' HoTs aren't included.
 - **Game options:** auto loot on; hold a key to keep casting its spell.
 - **Action buttons:** grey keybind text; the whole icon turns red when out of
   range.
@@ -94,6 +90,8 @@ the addon.
 - **Gathering pop-ups:** what you skin, mine, pick or fish flashes mid-screen
   the way quest progress does (`Light Leather +2 (14)`: gained, and how many
   you now carry), and so do gathering skill-ups (`Skinning: 76`).
+- **Loot pop-ups:** every other item you pick up flashes the same way, its
+  name in the item's quality color.
 - **Minimap:** addon buttons tucked into one button that slides them out.
 - **Meters:** two small windows at the bottom-right framed in WoW Forever's
   own bronze HUD line (the micro menu's box), Healing over Damage. Top 5 with

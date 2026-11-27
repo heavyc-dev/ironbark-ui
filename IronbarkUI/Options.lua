@@ -100,10 +100,6 @@ local function Build()
         "Your heal-over-time spells and shields (Rejuvenation, Regrowth, Renew, Power Word: Shield) under the left side of your own and each teammate's frame, with a timer. Updates in combat.",
         function() if ns.RefreshHots then ns.RefreshHots() end end)
 
-    Checkbox("hotBars", "HoT healing on health bars",
-        "A lighter green stretch past the end of someone's health: what your Rejuvenation, Regrowth or Renew still has to heal them, stopping at full. On your own, target, party and raid frames. Works from your own casts, so other healers' HoTs aren't included.",
-        function() if ns.RefreshHotBars then ns.RefreshHotBars() end end)
-
     Header("Bags")
     Checkbox("combinedBags", "One bag window",
         "All bags in one window with a category sort and a Sections view. Stands down while EllesmereUI's bags are enabled. Turning off needs /reload.",
@@ -130,6 +126,8 @@ local function Build()
 
     Checkbox("gatherPopups", "Gathering pop-ups",
         "What you skin, mine, pick or fish flashes mid-screen like quest progress does: \"Light Leather +2 (14)\", the bracket being how many you now carry. Gathering skill-ups too.")
+    Checkbox("lootPopups", "Loot pop-ups",
+        "Everything else you pick up flashes the same way, the name in the item's quality color: drops, quest rewards, things you buy or craft.")
 
     Header("Minimap")
     Checkbox("minimapCollect", "Tuck addon buttons into one button",
